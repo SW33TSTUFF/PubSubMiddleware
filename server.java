@@ -5,10 +5,11 @@ public class Server {
 
     private static ServerSocket serverSocket;
     private static Socket clientSocket;
-    private static PrintWriter out;
     private static BufferedReader in;
+    // private static String text = "";
 
     public static void main(String[] args) {
+        String text = "";
         System.out.println("Middleware assignment");
         if(args.length < 1) {
             System.out.println("Please use the proper format (java Server port_number)");
@@ -44,6 +45,29 @@ public class Server {
         // then we need to convert that byte stream to text, so we have the char
         // buffer reader then gives us the option to read line by line using readLine method
 
+        try {
+            in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+        } catch (IOException e) {
+            System.out.println("Error: " + e.getMessage());
+            System.exit(1);
+        }
+
+        try {
+            while((text = in.readLine()) != null) {
+                System.out.println("Client: " + text);
+            }
+        } catch (IOException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+
+
+        try {
+            clientSocket.close();
+            System.out.println("Connection is now closed!");
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+        
     }
 }
 
