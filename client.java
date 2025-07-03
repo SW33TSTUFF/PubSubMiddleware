@@ -9,6 +9,7 @@ public class Client {
     private static BufferedReader input;
 
     public static void main(String[] args) {
+        String text = "";
         System.out.println("Hello client");
     
 
@@ -24,6 +25,32 @@ public class Client {
         clientSocket = new Socket(ip, portNumber);
         System.out.println("Connected to the server!");
     } catch(Exception e) {
+        System.out.println(e.getMessage());
+    }
+
+    try {
+        // to send we are using printwriter
+        out = new PrintWriter(clientSocket.getOutputStream(), true);
+        // input stream reader is added to convert byte to characters
+        input = new BufferedReader(new InputStreamReader(System.in));
+
+        while((text = input.readLine()) != null) {
+            out.println(text);
+            if(text.trim().equalsIgnoreCase("terminate")) {
+                System.out.println("Can terminate!");
+                break;
+            }
+        }
+
+
+    } catch (IOException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+
+    try {
+    clientSocket.close();
+    System.out.println("Disconnected successfully!");
+    } catch(IOException e) {
         System.out.println(e.getMessage());
     }
 
