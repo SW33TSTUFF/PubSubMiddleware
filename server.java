@@ -1,78 +1,139 @@
 import java.net.*;
 import java.io.*;
+import java.util.*;
 
 public class Server {
 
-    private static ServerSocket serverSocket;
-    private static Socket clientSocket;
-    private static BufferedReader in;
-    // private static String text = "";
+    private ServerSocket serverSocket;
+    private List<SubscriberHandler> subscribersList = Collections.synchronizedList(new ArrayList<>());
+    // private static final String PUB = "PUBLISHER";
+    // private static final String SUB = "SUBSCRIBER";
 
     public static void main(String[] args) {
-        String text = "";
         System.out.println("Middleware assignment");
-        if(args.length < 1) {
-            System.out.println("Please use the proper format (java Server port_number)");
+        if (args.length < 1) {
+            System.out.println("Usage: java Server port_number");
             System.exit(1);
         }
 
         int portNumber = Integer.parseInt(args[0]);
-        System.out.println("Entered port number: " + portNumber);
+        Server server = new Server();
+        server.start(portNumber);
+    }
+
+    public void start(int port) {
+        System.out.println("Pub/Sub Server starting on port " + port);
 
         try {
-            serverSocket = new ServerSocket(portNumber);
-            if(serverSocket != null) {
-                System.out.println("Server is running in port " + portNumber);
+            serverSocket = new ServerSocket(port);
+            System.out.println("Server is running and waiting for connections...");
+
+            while (true) {
+                Socket clientSocket = serverSocket.accept();
+                // System.out.println("New client connected: " + clientSocket);
+                
+                // determine client type (pub or sub)
+                BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                String clientType = in.readLine();
+                
+                if (clientType != null && clientType.equalsIgnoreCase("PUBLISHER")) {
+                    new PublisherHandler(clientSocket, this).start();
+                } else if (clientType != null && clientType.equalsIgnoreCase("SUBSCRIBER")) {
+                    SubscriberHandler handler = new SubscriberHandler(clientSocket, this);
+                    subscribersList.add(handler);
+                    handler.start();
+                } else {
+                    System.out.println("Invalid client type, closing connection");
+                    clientSocket.close();
+                }
             }
         } catch (IOException e) {
-            System.out.println("Error: " + e.getMessage());
-            System.exit(1);
+            System.out.println("Server error: " + e.getMessage());
+        }
+    }
+
+    public synchronized void broadcastMessage(String message) {
+        System.out.println("Broadcasting message from publisher: " + message);
+        for (SubscriberHandler subscriber : subscribersList) {
+            subscriber.sendMessage(message);
+        }
+    }
+
+    public synchronized void removeSubscriber(SubscriberHandler subscriber) {
+        subscribersList.remove(subscriber);
+    }
+
+    private class PublisherHandler extends Thread {
+        private Socket clientSocket;
+        private BufferedReader in;
+        private Server server;
+
+        public PublisherHandler(Socket socket, Server server) {
+            this.clientSocket = socket;
+            this.server = server;
         }
 
-        try {
-            clientSocket = serverSocket.accept();
-            if(clientSocket != null) {
-                System.out.println("Client connected");
+        public void run() {
+            try {
+                in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                System.out.println("Publisher connected: " + clientSocket);
+
+                String inputLine;
+                while ((inputLine = in.readLine()) != null) {
+                    // System.out.println("Received from publisher: " + inputLine);
+                    server.broadcastMessage(inputLine);
+                }
+            } catch (IOException e) {
+                System.out.println("Publisher disconnected: " + e.getMessage());
+            } finally {
+                try {
+                    in.close();
+                    clientSocket.close();
+                } catch (IOException e) {
+                    System.out.println("Error closing publisher connection: " + e.getMessage());
+                }
             }
-        } catch (IOException e) {
-            System.out.println("Error: " + e.getMessage());
-            System.exit(1);
+        }
+    }
+
+    private class SubscriberHandler extends Thread {
+        private Socket clientSocket;
+        private PrintWriter out;
+        private Server server;
+
+        public SubscriberHandler(Socket socket, Server server) {
+            this.clientSocket = socket;
+            this.server = server;
         }
 
+        public void run() {
+            try {
+                out = new PrintWriter(clientSocket.getOutputStream(), true);
+                System.out.println("Subscriber connected: " + clientSocket);
 
-        // now we need to read the data from client to server
-        // by using input stream we get the raw byte data from the client side
-        // then we need to convert that byte stream to text, so we have the char
-        // buffer reader then gives us the option to read line by line using readLine method
-
-        try {
-            in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-        } catch (IOException e) {
-            System.out.println("Error: " + e.getMessage());
-            System.exit(1);
-        }
-
-        try {
-            while((text = in.readLine()) != null) {
-                System.out.println("Client: " + text);
+                // just to keep the connection open
+                while (!clientSocket.isClosed()) {
+                    Thread.sleep(1000); // Prevent busy waiting
+                }
+            } catch (Exception e) {
+                System.out.println("Subscriber disconnected: " + e.getMessage());
+            } finally {
+                server.subscribersList.remove(this);
+                // server.removeSubscriber(this);
+                try {
+                    out.close();
+                    clientSocket.close();
+                } catch (IOException e) {
+                    System.out.println("Error closing subscriber connection: " + e.getMessage());
+                }
             }
-        } catch (IOException e) {
-            System.out.println("Error: " + e.getMessage());
         }
 
-
-        try {
-            clientSocket.close();
-            System.out.println("Connection is now closed!");
-        } catch (Exception e) {
-            System.out.println("Error: " + e.getMessage());
+        public void sendMessage(String message) {
+            out.println(message);
         }
-        
     }
 }
-
-
-
 
 // REFERENCES
 // https://www.baeldung.com/a-guide-to-java-sockets - for java sockets
